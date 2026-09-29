@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DiveMath - planner</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #081b26; color: #e3f2f8; margin: 0; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+  main { max-width: 720px; padding: 32px 20px 48px; width: 100%; box-sizing: border-box; }
+  h1 { font-size: 1.9rem; margin: 0 0 4px; }
+  p.sub { color: #9cc6d8; margin: 0 0 20px; }
+  .card { background: #0e2a3a; border: 1px solid #1f4a63; border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 18px; }
+  label { display: block; color: #8db9cc; font-size: 0.82rem; margin-bottom: 4px; }
+  input, select { width: 100%; box-sizing: border-box; background: #081b26; border: 1px solid #275672; color: #e3f2f8; border-radius: 8px; padding: 9px 10px; font-size: 0.95rem; }
+  .presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .presets button { background: #12374d; color: #c8e4f0; border: 1px solid #275672; border-radius: 999px; padding: 7px 14px; font-size: 0.85rem; cursor: pointer; }
+  .presets button:hover { background: #1a4b66; }
+  .out { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .metric { background: #081b26; border: 1px solid #1f4a63; border-radius: 10px; padding: 12px 14px; }
+  .metric .v { font-size: 1.35rem; font-weight: 700; color: #63cbe5; }
+  .metric .k { color: #8db9cc; font-size: 0.78rem; margin-top: 2px; }
+  .note { color: #79a7ba; font-size: 0.82rem; line-height: 1.5; margin-top: 10px; }
+  a.back { color: #63cbe5; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>&#129343; DiveMath</h1>
+  <p class="sub">Recreational dive planner. Depth eats gas; see by how much before you splash.</p>
+  <div class="presets">
+    <button data-p="reef">Shallow reef (35 ft)</button>
+    <button data-p="classic">Classic boat dive (60 ft)</button>
+    <button data-p="deep">Deep wreck (100 ft)</button>
+    <button data-p="nitrox">Nitrox 32 at 80 ft</button>
+  </div>
+  <div class="card">
+    <div class="grid">
+      <div><label>Planned depth (ft)</label><input id="depthFt" type="number" value="60" min="10"></div>
+      <div><label>Start pressure (psi)</label><input id="startPsi" type="number" value="3000" min="500" step="100"></div>
+      <div><label>Reserve pressure (psi)</label><input id="reservePsi" type="number" value="500" min="0" step="100"></div>
+      <div><label>Your surface SAC (psi/min)</label><input id="sacPsiMin" type="number" value="20" min="5"></div>
+      <div><label>Gas mix O2 fraction</label><select id="fO2"><option value="0.21" selected>Air (21%)</option><option value="0.32">Nitrox 32</option><option value="0.36">Nitrox 36</option></select></div>
+      <div><label>pO2 ceiling</label><select id="pO2Max"><option value="1.4" selected>1.4 (working dive)</option><option value="1.6">1.6 (contingency)</option></select></div>
+    </div>
+  </div>
+  <div class="out">
+    <div class="metric"><div class="v" id="o-ata">-</div><div class="k">Pressure at depth (ata)</div></div>
+    <div class="metric"><div class="v" id="o-cons">-</div><div class="k">Gas burn (psi/min)</div></div>
+    <div class="metric"><div class="v" id="o-bottom">-</div><div class="k">Bottom time on gas (min)</div></div>
+    <div class="metric"><div class="v" id="o-ndl">-</div><div class="k">No-deco limit (min)</div></div>
+    <div class="metric"><div class="v" id="o-turn">-</div><div class="k">Rule-of-thirds turn (psi)</div></div>
+    <div class="metric"><div class="v" id="o-rock">-</div><div class="k">Rock-bottom for two (psi)</div></div>
+    <div class="metric"><div class="v" id="o-mod">-</div><div class="k">MOD for this mix (ft)</div></div>
+    <div class="metric"><div class="v" id="o-end">-</div><div class="k">Equivalent narcotic depth (ft)</div></div>
+  </div>
+  <p class="note" id="o-verdict"></p>
+  <p class="note" id="o-warn"></p>
+  <p class="note">Planning math for certified divers. Tables, training and your dive computer outrank anything here. The no-deco numbers follow a PADI-style table with linear interpolation between rows.</p>
+  <p><a class="back" href="index.html">&larr; Back to DiveMath</a></p>
+</main>
+<script src="engine.js"></script>
+<script>
+(function () {
+  var ids = ['depthFt','startPsi','reservePsi','sacPsiMin','fO2','pO2Max'];
+  function num(id) { var v = parseFloat(document.getElementById(id).value); return isFinite(v) ? v : 0; }
+  function compute() {
+    if (typeof DiveMath === 'undefined') return;
+    var depth = num('depthFt'), start = num('startPsi'), reserve = num('reservePsi'), sac = num('sacPsiMin');
+    var fO2 = num('fO2'), pO2Max = num('pO2Max');
+    var ata = DiveMath.pressureAta(depth);
+    var cons = DiveMath.consumptionPsiMin(sac, depth);
+    var bottom = DiveMath.bottomMinutes({startPsi: start, reservePsi: reserve, sacPsiMin: sac, depthFt: depth});
+    var ndl = DiveMath.noDecoLimit(depth);
+    var turn = DiveMath.turnPsiThirds(start);
+    var rock = DiveMath.rockBottomPsi({depthFt: depth, sacPsiMin: sac});
+    var mod = DiveMath.modFt(fO2, pO2Max);
+    var end = DiveMath.endFt(depth, fO2);
+    var ascent = DiveMath.ascentMinutes(depth);
+    document.getElementById('o-ata').textContent = ata + ' ata';
+    document.getElementById('o-cons').textContent = cons + ' psi/min';
+    document.getElementById('o-bottom').textContent = bottom + ' min';
+    document.getElementById('o-ndl').textContent = ndl + ' min';
+    document.getElementById('o-turn').textContent = turn + ' psi';
+    document.getElementById('o-rock').textContent = rock + ' psi';
+    document.getElementById('o-mod').textContent = mod + ' ft';
+    document.getElementById('o-end').textContent = end + ' ft';
+    document.getElementById('o-verdict').textContent =
+      'What calls this dive: ' + DiveMath.limitingFactor(bottom, ndl) +
+      '. Ascent from ' + depth + ' ft takes about ' + ascent + ' min including the stop.';
+    document.getElementById('o-warn').textContent =
+      depth > mod
+        ? 'WARNING: ' + depth + ' ft exceeds the MOD of ' + mod + ' ft for this mix at pO2 ' + pO2Max + ' - oxygen toxicity risk.'
+        : 'Best mix for ' + depth + ' ft at 1.4 would be EAN' + Math.round(DiveMath.bestMix(depth) * 100) + '.';
+  }
+  var presets = {
+    reef: {depthFt:35, startPsi:3000, reservePsi:500, sacPsiMin:18, fO2:0.21, pO2Max:1.4},
+    classic: {depthFt:60, startPsi:3000, reservePsi:500, sacPsiMin:20, fO2:0.21, pO2Max:1.4},
+    deep: {depthFt:100, startPsi:3000, reservePsi:700, sacPsiMin:22, fO2:0.21, pO2Max:1.4},
+    nitrox: {depthFt:80, startPsi:3000, reservePsi:500, sacPsiMin:20, fO2:0.32, pO2Max:1.4}
+  };
+  Array.prototype.forEach.call(document.querySelectorAll('.presets button'), function (b) {
+    b.addEventListener('click', function () {
+      var p = presets[b.getAttribute('data-p')];
+      if (!p) return;
+      Object.keys(p).forEach(function (k) { document.getElementById(k).value = p[k]; });
+      compute();
+    });
+  });
+  ids.forEach(function (id) {
+    document.getElementById(id).addEventListener('input', compute);
+    document.getElementById(id).addEventListener('change', compute);
+  });
+  compute();
+})();
+</script>
+</body>
+</html>
